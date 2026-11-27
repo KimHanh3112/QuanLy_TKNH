@@ -294,6 +294,11 @@ namespace QLTKNH
         private bool _searchRefreshing;
         private bool _dangDungBangVay;
         private readonly System.Windows.Forms.Timer _timerLocVay = new System.Windows.Forms.Timer { Interval = 250 };
+        // Danh sách theo từng khoản vay, đọc từ ghi chú giải ngân hiện có.
+        private Dictionary<string, HashSet<string>> _dongSoHuuTheoVay =
+            new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        private const string MocDongSoHuuVay = "; Đồng sở hữu khi mở: ";
+
         private HashSet<string> _vayBangSoCache = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private Dictionary<string, decimal> _laiPhiCache = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
         private Font _fontNhomNoVay;
@@ -561,6 +566,8 @@ namespace QLTKNH
                 // Nap tong hop mot lan moi dot lam moi SQL, khong truy van khi loc bang.
                 var vayBangSoMoi = LayCacKhoanVayBangSoTietKiem();
                 var laiPhiMoi = LayTongLaiVaPhiDaThanhToan();
+                var dongSoHuuTheoVayMoi = LayDongSoHuuTheoKhoanVay();
+                _dongSoHuuTheoVay = dongSoHuuTheoVayMoi;
                 _vayBangSoCache = vayBangSoMoi;
                 _laiPhiCache = laiPhiMoi;
                 listKhachHang = customers;
@@ -1355,6 +1362,11 @@ namespace QLTKNH
                                                 ? ((FrmMain.SoTietKiemTheChap)cboSoCamCo.SelectedItem).SoTKTK : txtSoNgoai.Text.Trim();
                                             ghiChu = $"Vay thế chấp sổ tiết kiệm {loaiCamCo}; Số sổ: {soCamCo}; Hạn mức: {maxLoanAmount:N0} VND; Lãi suất vay: {laiSuatVal}%/năm";
                                         }
+                                        // Lưu lựa chọn theo STK trong cột GhiChu đã có, không thêm bảng/cột SQL.
+                                        ghiChu += MocDongSoHuuVay + (dongSoHuuMoi.Count == 0
+                                            ? "Không" : string.Join(",", dongSoHuuMoi.Select(d => d.Item1)));
+                                        if (ghiChu.Length > 500)
+                                            throw new InvalidOperationException("Ghi chú giải ngân vượt giới hạn 500 ký tự.");
                                         using (var history = new SqlCommand(@"INSERT INTO dbo.LichSuGiaoDichVay
                                             (SoTKVay, NgayGiaoDich, LoaiGiaoDich, SoTienGoc, SoTienLai, TongTien, SoDuConLai, GhiChu, NguoiThucHien)
                                             VALUES (@stk, GETDATE(), N'Giải ngân', @tien, 0, @tien, @tien, @note, @nguoi)", conn, transaction))
@@ -1770,6 +1782,52 @@ namespace QLTKNH
         #endregion
 
         #region Hiển Thị Danh Sách Lên DataGridView & Thống Kê
+        private Dictionary<string, HashSet<string>> LayDongSoHuuTheoKhoanVay()
+        {
+            var result = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+            using (var cn = new SqlConnection(_connStr))
+            using (var cmd = new SqlCommand(@"
+                SELECT SoTKVay, GhiChu FROM dbo.LichSuGiaoDichVay
+                WHERE LoaiGiaoDich=N'Giải ngân'
+                  AND GhiChu LIKE N'%; Đồng sở hữu khi mở: %'
+                ORDER BY NgayGiaoDich DESC, Id DESC", cn))
+            {
+                cn.Open();
+                using (var rd = cmd.ExecuteReader())
+                    while (rd.Read())
+                    {
+                        string stk = Convert.ToString(rd[0]);
+                        if (result.ContainsKey(stk)) continue;
+                        string note = Convert.ToString(rd[1]);
+                        int pos = note.LastIndexOf(MocDongSoHuuVay, StringComparison.Ordinal);
+                        if (pos < 0) continue;
+                        string value = note.Substring(pos + MocDongSoHuuVay.Length).Trim();
+                        var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        if (!string.Equals(value, "Không", StringComparison.OrdinalIgnoreCase))
+                        {
+                            foreach (string id in value.Split(','))
+                            {
+                                string cccd = id.Trim();
+                                if (cccd.Length == 12 && cccd.All(char.IsDigit)) ids.Add(cccd);
+                            }
+                        }
+                        result[stk] = ids;
+                    }
+            }
+            return result;
+        }
+
+        private IEnumerable<FrmMain.DongSoHuuData> DongSoHuuCuaKhoanVay(FrmMain.KhachHangData kh, string stk)
+        {
+            if (kh == null) return Enumerable.Empty<FrmMain.DongSoHuuData>();
+            HashSet<string> ids;
+            if (_dongSoHuuTheoVay.TryGetValue(stk ?? "", out ids))
+                return kh.DanhSachDongSoHuu.Where(d => ids.Contains(d.CCCD));
+            // Khoản vay cũ chưa ghi nhận lựa chọn: giữ cách hiển thị cũ của danh sách.
+            if (_vayBangSoCache.Contains(stk ?? "")) return Enumerable.Empty<FrmMain.DongSoHuuData>();
+            return kh.DanhSachDongSoHuu;
+        }
+
         private HashSet<string> LayCacKhoanVayBangSoTietKiem()
         {
             var ketQua = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -1825,7 +1883,6 @@ namespace QLTKNH
                 dgvVay.Rows.Clear();
                 // Khoản vay thế chấp sổ tiết kiệm chỉ hiển thị người đứng tên
                 // trong TaiKhoanVay.CCCD. Không tự kế thừa đồng sở hữu của sổ.
-                HashSet<string> vayBangSo = _vayBangSoCache;
                 Dictionary<string, decimal> laiVaPhiDaTra = _laiPhiCache;
                 List<VayGridRowModel> gridList = new List<VayGridRowModel>();
 
@@ -1860,31 +1917,30 @@ namespace QLTKNH
                         TinhNhomNo(rowChuo);
                         gridList.Add(rowChuo);
 
-                        if (!vayBangSo.Contains(vay.SoTKVay))
-                            foreach (var dsh in kh.DanhSachDongSoHuu)
+                        foreach (var dsh in DongSoHuuCuaKhoanVay(kh, vay.SoTKVay))
+                        {
+                            var rowDsh = new VayGridRowModel
                             {
-                                var rowDsh = new VayGridRowModel
-                                {
-                                    SoTKVay = vay.SoTKVay,
-                                    CCCD = dsh.CCCD,
-                                    HoTen = dsh.HoTen,
-                                    SoDienThoai = dsh.SoDienThoai,
-                                    SoTienVay = vay.SoTienVay,
-                                    SoTienDaTra = vay.SoTienDaTra,
-                                    SoTienGocDaTra = dictSoTienGocDaTra[vay.SoTKVay],
-                                    TongTienDaThanhToan = vay.SoTienDaTra + (laiVaPhiDaTra.TryGetValue(vay.SoTKVay, out decimal tongLaiPhiDsh) ? tongLaiPhiDsh : 0m),
-                                    LaiSuat = vay.LaiSuat,
-                                    KyHan = vay.KyHan,
-                                    NgayMo = vay.NgayMo,
-                                    NgayCapNhatTrangThai = vay.NgayCapNhatTrangThai,
-                                    VaiTro = "Đồng sở hữu",
-                                    TrangThai = vay.TrangThai,
-                                    RawVayItem = vay,
-                                    RawKhachHang = kh
-                                };
-                                TinhNhomNo(rowDsh);
-                                gridList.Add(rowDsh);
-                            }
+                                SoTKVay = vay.SoTKVay,
+                                CCCD = dsh.CCCD,
+                                HoTen = dsh.HoTen,
+                                SoDienThoai = dsh.SoDienThoai,
+                                SoTienVay = vay.SoTienVay,
+                                SoTienDaTra = vay.SoTienDaTra,
+                                SoTienGocDaTra = dictSoTienGocDaTra[vay.SoTKVay],
+                                TongTienDaThanhToan = vay.SoTienDaTra + (laiVaPhiDaTra.TryGetValue(vay.SoTKVay, out decimal tongLaiPhiDsh) ? tongLaiPhiDsh : 0m),
+                                LaiSuat = vay.LaiSuat,
+                                KyHan = vay.KyHan,
+                                NgayMo = vay.NgayMo,
+                                NgayCapNhatTrangThai = vay.NgayCapNhatTrangThai,
+                                VaiTro = "Đồng sở hữu",
+                                TrangThai = vay.TrangThai,
+                                RawVayItem = vay,
+                                RawKhachHang = kh
+                            };
+                            TinhNhomNo(rowDsh);
+                            gridList.Add(rowDsh);
+                        }
                     }
                 }
 
@@ -2263,7 +2319,7 @@ namespace QLTKNH
                     var chu = model.RawKhachHang ?? listKhachHang.FirstOrDefault(k =>
                         string.Equals(k.CCCD, chuCCCD, StringComparison.OrdinalIgnoreCase));
                     if (chu != null)
-                        foreach (var dsh in chu.DanhSachDongSoHuu)
+                        foreach (var dsh in DongSoHuuCuaKhoanVay(chu, model.SoTKVay))
                             owners.Rows.Add("Đồng sở hữu", dsh.HoTen, dsh.CCCD, dsh.SoDienThoai, status);
                     foreach (DataGridViewRow r in owners.Rows)
                         r.Cells[0].Style.ForeColor = r.Index == 0 ? Color.FromArgb(96, 165, 250) : Color.FromArgb(192, 132, 252);

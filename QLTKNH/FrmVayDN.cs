@@ -41,6 +41,14 @@ namespace QLTKNH
         private readonly Color colorGreenButton = Color.FromArgb(22, 163, 74);
         private readonly Color colorTextMuted = Color.FromArgb(160, 174, 192);
 
+        private Dictionary<string, List<FrmMainDN.DongSoHuuData>> _uyQuyenTheoKhoanVayDN =
+            new Dictionary<string, List<FrmMainDN.DongSoHuuData>>(StringComparer.OrdinalIgnoreCase);
+        private IEnumerable<FrmMainDN.DongSoHuuData> LayUyQuyenKhoanVayDN(string stk)
+        {
+            List<FrmMainDN.DongSoHuuData> ds;
+            return _uyQuyenTheoKhoanVayDN.TryGetValue(stk, out ds) ? ds : Enumerable.Empty<FrmMainDN.DongSoHuuData>();
+        }
+
         // Danh sách khách hàng dùng chung
         private List<FrmMainDN.KhachHangData> listKhachHang = new List<FrmMainDN.KhachHangData>();
 
@@ -529,6 +537,17 @@ namespace QLTKNH
                             });
                         }
                     }
+                    var linksDN = new Dictionary<string, List<FrmMainDN.DongSoHuuData>>(StringComparer.OrdinalIgnoreCase);
+                    using (var cmd = new SqlCommand(@"SELECT d.SoTKVay,d.CCCD,d.HoTen,d.SoDienThoai FROM dbo.DN_DongSoHuuTaiKhoanVay d JOIN dbo.DN_TaiKhoanVay v ON v.SoTKVay=d.SoTKVay WHERE d.CCCD<>v.CCCD", conn))
+                    using (var r = cmd.ExecuteReader())
+                        while (r.Read())
+                        {
+                            string stk = Convert.ToString(r[0]);
+                            List<FrmMainDN.DongSoHuuData> ds;
+                            if (!linksDN.TryGetValue(stk, out ds)) linksDN[stk] = ds = new List<FrmMainDN.DongSoHuuData>();
+                            ds.Add(new FrmMainDN.DongSoHuuData { CCCD = Convert.ToString(r[1]), HoTen = Convert.ToString(r[2]), SoDienThoai = Convert.ToString(r[3]) });
+                        }
+                    _uyQuyenTheoKhoanVayDN = linksDN;
                     using (var cmd = new SqlCommand("SELECT SoTKVay, CCCD, SoTienVay, SoTienDaTra, LaiSuat, KyHan, TrangThai, NgayMo, NgayCapNhatTrangThai FROM dbo.DN_TaiKhoanVay", conn))
                     using (var r = cmd.ExecuteReader())
                     {
@@ -1119,18 +1138,7 @@ namespace QLTKNH
                                         throw new InvalidOperationException("Số tài khoản đã tồn tại. Vui lòng tạo số khác.");
                                 }
                                 foreach (var d in dongSoHuuMoi)
-                                {
-                                    using (var check = new SqlCommand(@"SELECT COUNT(*) FROM (
-                                        SELECT CCCD, SoDienThoai FROM dbo.DN_KhachHang
-                                        UNION ALL SELECT CCCD, SoDienThoai FROM dbo.DN_DongSoHuu
-                                    ) x WHERE CCCD=@cccd OR SoDienThoai=@sdt", conn, transaction))
-                                    {
-                                        check.Parameters.Add("@cccd", SqlDbType.VarChar, 12).Value = d.Item1;
-                                        check.Parameters.Add("@sdt", SqlDbType.VarChar, 11).Value = d.Item3;
-                                        if (Convert.ToInt32(check.ExecuteScalar()) > 0)
-                                            throw new InvalidOperationException("CCCD hoặc số điện thoại của người được ủy quyền đã tồn tại: " + d.Item1);
-                                    }
-                                }
+                                    FrmMainDN.KiemTraNguoiUyQuyenKhiThemDN(conn, transaction, d.Item1, d.Item2, d.Item3);
                                 // Tạo hồ sơ mới chỉ sau khi kiểm tra quyền, trong cùng transaction với khoản vay.
                                 FrmMainDN.DamBaoHoSoMoMoiTuTimKiemDN(conn, transaction, hoSo);
                                 using (var cmd = new SqlCommand("SELECT COUNT(*) FROM dbo.DN_KhachHang WHERE CCCD=@cccd", conn, transaction))
@@ -1156,11 +1164,12 @@ namespace QLTKNH
                                 }
                                 foreach (var d in dongSoHuuMoi)
                                 {
-                                    using (var cmd = new SqlCommand(@"INSERT INTO dbo.DN_DongSoHuu
-                                        (CCCD_ChuSoHuu, CCCD, HoTen, SoDienThoai)
-                                        VALUES (@chu,@cccd,@ten,@sdt)", conn, transaction))
+                                    using (var cmd = new SqlCommand(@"IF NOT EXISTS(SELECT 1 FROM dbo.DN_DongSoHuu WHERE CCCD_ChuSoHuu=@chu AND CCCD=@cccd)
+                                            INSERT INTO dbo.DN_DongSoHuu(CCCD_ChuSoHuu, CCCD, HoTen, SoDienThoai) VALUES (@chu,@cccd,@ten,@sdt);
+                                            INSERT INTO dbo.DN_DongSoHuuTaiKhoanVay(SoTKVay,CCCD,HoTen,SoDienThoai) VALUES(@stk,@cccd,@ten,@sdt);", conn, transaction))
                                     {
                                         cmd.Parameters.Add("@chu", SqlDbType.VarChar, 12).Value = (model.RawKhachHang != null ? model.RawKhachHang.CCCD : model.CCCD);
+                                        cmd.Parameters.Add("@stk", SqlDbType.VarChar, 20).Value = stkMoi;
                                         cmd.Parameters.Add("@cccd", SqlDbType.VarChar, 12).Value = d.Item1;
                                         cmd.Parameters.Add("@ten", SqlDbType.NVarChar, 200).Value = d.Item2;
                                         cmd.Parameters.Add("@sdt", SqlDbType.VarChar, 11).Value = d.Item3;
@@ -1777,18 +1786,7 @@ namespace QLTKNH
                                             throw new InvalidOperationException("Số tài khoản đã tồn tại. Vui lòng tạo số khác.");
                                     }
                                     foreach (var d in dongSoHuuMoi)
-                                    {
-                                        using (var check = new SqlCommand(@"SELECT COUNT(*) FROM (
-                                            SELECT CCCD, SoDienThoai FROM dbo.DN_KhachHang
-                                            UNION ALL SELECT CCCD, SoDienThoai FROM dbo.DN_DongSoHuu
-                                        ) x WHERE CCCD=@cccd OR SoDienThoai=@sdt", conn, transaction))
-                                        {
-                                            check.Parameters.Add("@cccd", SqlDbType.VarChar, 12).Value = d.Item1;
-                                            check.Parameters.Add("@sdt", SqlDbType.VarChar, 11).Value = d.Item3;
-                                            if (Convert.ToInt32(check.ExecuteScalar()) > 0)
-                                                throw new InvalidOperationException("CCCD hoặc số điện thoại của người được ủy quyền đã tồn tại: " + d.Item1);
-                                        }
-                                    }
+                                        FrmMainDN.KiemTraNguoiUyQuyenKhiThemDN(conn, transaction, d.Item1, d.Item2, d.Item3);
                                     // Không tạo hồ sơ doanh nghiệp từ CCCD của người được ủy quyền.
                                     using (var cmd = new SqlCommand("SELECT COUNT(*) FROM dbo.DN_KhachHang WHERE CCCD=@cccd", conn, transaction))
                                     {
@@ -1813,11 +1811,12 @@ namespace QLTKNH
                                     }
                                     foreach (var d in dongSoHuuMoi)
                                     {
-                                        using (var cmd = new SqlCommand(@"INSERT INTO dbo.DN_DongSoHuu
-                                            (CCCD_ChuSoHuu, CCCD, HoTen, SoDienThoai)
-                                            VALUES (@chu,@cccd,@ten,@sdt)", conn, transaction))
+                                        using (var cmd = new SqlCommand(@"IF NOT EXISTS(SELECT 1 FROM dbo.DN_DongSoHuu WHERE CCCD_ChuSoHuu=@chu AND CCCD=@cccd)
+                                            INSERT INTO dbo.DN_DongSoHuu(CCCD_ChuSoHuu, CCCD, HoTen, SoDienThoai) VALUES (@chu,@cccd,@ten,@sdt);
+                                            INSERT INTO dbo.DN_DongSoHuuTaiKhoanVay(SoTKVay,CCCD,HoTen,SoDienThoai) VALUES(@stk,@cccd,@ten,@sdt);", conn, transaction))
                                         {
                                             cmd.Parameters.Add("@chu", SqlDbType.VarChar, 12).Value = (model.RawKhachHang != null ? model.RawKhachHang.CCCD : model.CCCD);
+                                            cmd.Parameters.Add("@stk", SqlDbType.VarChar, 20).Value = stkMoi;
                                             cmd.Parameters.Add("@cccd", SqlDbType.VarChar, 12).Value = d.Item1;
                                             cmd.Parameters.Add("@ten", SqlDbType.NVarChar, 200).Value = d.Item2;
                                             cmd.Parameters.Add("@sdt", SqlDbType.VarChar, 11).Value = d.Item3;
@@ -2354,31 +2353,30 @@ namespace QLTKNH
                         TinhNhomNo(rowChuo);
                         gridList.Add(rowChuo);
 
-                        if (!vayBangSo.Contains(vay.SoTKVay))
-                            foreach (var dsh in kh.DanhSachDongSoHuu)
+                        foreach (var dsh in LayUyQuyenKhoanVayDN(vay.SoTKVay))
+                        {
+                            var rowDsh = new VayGridRowModel
                             {
-                                var rowDsh = new VayGridRowModel
-                                {
-                                    SoTKVay = vay.SoTKVay,
-                                    CCCD = dsh.CCCD,
-                                    HoTen = dsh.HoTen,
-                                    SoDienThoai = dsh.SoDienThoai,
-                                    SoTienVay = vay.SoTienVay,
-                                    SoTienDaTra = vay.SoTienDaTra,
-                                    SoTienGocDaTra = dictSoTienGocDaTra[vay.SoTKVay],
-                                    TongTienDaThanhToan = vay.SoTienDaTra + (laiVaPhiDaTra.TryGetValue(vay.SoTKVay, out decimal tongLaiPhiDsh) ? tongLaiPhiDsh : 0m),
-                                    LaiSuat = vay.LaiSuat,
-                                    KyHan = vay.KyHan,
-                                    NgayMo = vay.NgayMo,
-                                    NgayCapNhatTrangThai = vay.NgayCapNhatTrangThai,
-                                    VaiTro = "Người được ủy quyền",
-                                    TrangThai = vay.TrangThai,
-                                    RawVayItem = vay,
-                                    RawKhachHang = kh
-                                };
-                                TinhNhomNo(rowDsh);
-                                gridList.Add(rowDsh);
-                            }
+                                SoTKVay = vay.SoTKVay,
+                                CCCD = dsh.CCCD,
+                                HoTen = dsh.HoTen,
+                                SoDienThoai = dsh.SoDienThoai,
+                                SoTienVay = vay.SoTienVay,
+                                SoTienDaTra = vay.SoTienDaTra,
+                                SoTienGocDaTra = dictSoTienGocDaTra[vay.SoTKVay],
+                                TongTienDaThanhToan = vay.SoTienDaTra + (laiVaPhiDaTra.TryGetValue(vay.SoTKVay, out decimal tongLaiPhiDsh) ? tongLaiPhiDsh : 0m),
+                                LaiSuat = vay.LaiSuat,
+                                KyHan = vay.KyHan,
+                                NgayMo = vay.NgayMo,
+                                NgayCapNhatTrangThai = vay.NgayCapNhatTrangThai,
+                                VaiTro = "Người được ủy quyền",
+                                TrangThai = vay.TrangThai,
+                                RawVayItem = vay,
+                                RawKhachHang = kh
+                            };
+                            TinhNhomNo(rowDsh);
+                            gridList.Add(rowDsh);
+                        }
                     }
                 }
 
@@ -2762,9 +2760,10 @@ namespace QLTKNH
                     try
                     {
                         using (var conn = new SqlConnection(_connStr))
-                        using (var cmd = new SqlCommand("SELECT CCCD, HoTen, SoDienThoai FROM dbo.DN_DongSoHuu WHERE CCCD_ChuSoHuu=@cccd ORDER BY Id", conn))
+                        using (var cmd = new SqlCommand("SELECT CCCD, HoTen, SoDienThoai FROM dbo.DN_DongSoHuuTaiKhoanVay WHERE SoTKVay=@stk AND CCCD<>@cccd ORDER BY CCCD", conn))
                         {
                             cmd.Parameters.AddWithValue("@cccd", chuCCCD);
+                            cmd.Parameters.AddWithValue("@stk", model.SoTKVay);
                             conn.Open();
                             using (var rd = cmd.ExecuteReader())
                                 while (rd.Read()) owners.Rows.Add("Người được ủy quyền", rd["HoTen"], rd["CCCD"], rd["SoDienThoai"], status);

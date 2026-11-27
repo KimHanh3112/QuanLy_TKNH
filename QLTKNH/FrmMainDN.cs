@@ -493,7 +493,7 @@ namespace QLTKNH
 
                 // 2. Đọc danh sách Người được ủy quyền
                 using (SqlCommand cmd = new SqlCommand(
-                    @"SELECT CCCD_ChuSoHuu, CCCD, HoTen, SoDienThoai FROM dbo.DN_DongSoHuu ORDER BY Id", conn))
+                    @"SELECT CCCD_ChuSoHuu, CCCD, HoTen, SoDienThoai FROM (SELECT CCCD_ChuSoHuu, CCCD, HoTen, SoDienThoai, ROW_NUMBER() OVER (PARTITION BY CCCD_ChuSoHuu, CCCD ORDER BY Id DESC) AS rn FROM dbo.DN_DongSoHuu WHERE CCCD<>CCCD_ChuSoHuu) d WHERE rn=1", conn))
                 using (SqlDataReader r = cmd.ExecuteReader())
                 {
                     while (r.Read())
@@ -994,6 +994,28 @@ namespace QLTKNH
             }
         }
 
+        // Kiểm tra danh tính người được ủy quyền trong transaction mở tài khoản.
+        // Cho phép dùng lại đúng CCCD/họ tên/SĐT; không ghi đè hồ sơ cũ.
+        internal static void KiemTraNguoiUyQuyenKhiThemDN(SqlConnection cn, SqlTransaction tx,
+            string cccd, string ten, string sdt)
+        {
+            using (var cmd = new SqlCommand(@"SELECT CCCD,HoTen,SoDienThoai FROM dbo.DN_DongSoHuu WHERE CCCD=@c OR SoDienThoai=@p
+                UNION ALL SELECT CCCD,HoTen,SoDienThoai FROM dbo.DN_DongSoHuuTaiKhoanThanhToan WHERE CCCD=@c OR SoDienThoai=@p
+                UNION ALL SELECT CCCD,HoTen,SoDienThoai FROM dbo.DN_DongSoHuuSoTietKiem WHERE CCCD=@c OR SoDienThoai=@p
+                UNION ALL SELECT CCCD,HoTen,SoDienThoai FROM dbo.DN_DongSoHuuTaiKhoanVay WHERE CCCD=@c OR SoDienThoai=@p
+                UNION ALL SELECT CCCD,HoTen,SoDienThoai FROM dbo.DN_KhachHang WHERE CCCD=@c OR SoDienThoai=@p", cn, tx))
+            {
+                cmd.Parameters.Add("@c", System.Data.SqlDbType.VarChar, 12).Value = cccd;
+                cmd.Parameters.Add("@p", System.Data.SqlDbType.VarChar, 11).Value = sdt;
+                using (var rd = cmd.ExecuteReader())
+                    while (rd.Read())
+                        if (!string.Equals(Convert.ToString(rd[0]).Trim(), cccd, StringComparison.OrdinalIgnoreCase) ||
+                            !string.Equals(Convert.ToString(rd[1]).Trim(), ten, StringComparison.OrdinalIgnoreCase) ||
+                            !string.Equals(Convert.ToString(rd[2]).Trim(), sdt, StringComparison.Ordinal))
+                            throw new InvalidOperationException("Thông tin người được ủy quyền không khớp hồ sơ đã lưu: " + cccd + ". Hãy kiểm tra lại thông tin trước khi mở tài khoản.");
+            }
+        }
+
         // Lưu tài khoản và lịch sử DN trong cùng một giao dịch SQL.
         private bool LuuTaiKhoanMoiDN(KhachHangData kh, string stk, bool tietKiem,
             decimal tien = 0m, double lai = 0, string ky = "")
@@ -1044,6 +1066,8 @@ namespace QLTKNH
                             cmd.ExecuteNonQuery();
                         }
                         foreach (var co in kh.DanhSachDongSoHuu)
+                        {
+                            KiemTraNguoiUyQuyenKhiThemDN(cn, tr, co.CCCD, co.HoTen, co.SoDienThoai);
                             using (var cmd = new SqlCommand(@"IF NOT EXISTS(SELECT 1 FROM dbo.DN_DongSoHuu WHERE CCCD_ChuSoHuu=@chu AND CCCD=@c)
  INSERT dbo.DN_DongSoHuu(CCCD_ChuSoHuu,CCCD,HoTen,SoDienThoai) VALUES(@chu,@c,@n,@p);" +
      (tietKiem ? @"INSERT dbo.DN_DongSoHuuSoTietKiem(SoTKTK,CCCD,HoTen,SoDienThoai) VALUES(@stk,@c,@n,@p);" :
@@ -1056,6 +1080,7 @@ namespace QLTKNH
                                 cmd.Parameters.AddWithValue("@p", co.SoDienThoai);
                                 cmd.ExecuteNonQuery();
                             }
+                        }
                         tr.Commit();
                     }
                 }
@@ -1417,7 +1442,7 @@ namespace QLTKNH
                     }
                     if (moTuNguoiUyQuyen && (string.IsNullOrWhiteSpace(txtTenDoanhNghiepMoi.Text) || txtTenDoanhNghiepMoi.Text.Trim().Length > 100))
                     { MessageBox.Show("Vui lòng nhập tên doanh nghiệp (tối đa 100 ký tự).", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning); txtTenDoanhNghiepMoi.Focus(); return false; }
-                    if (txtCCCD.Text.Length != 12 || string.IsNullOrWhiteSpace(txtHoTen.Text)) { MessageBox.Show($"Vui lòng nhập đủ 12 số {nhanDinhDanh} và Họ tên hợp lệ!", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Warning); return false; }
+                    if (txtCCCD.Text.Length < 10 || txtCCCD.Text.Length > 12 || !txtCCCD.Text.All(char.IsDigit) || string.IsNullOrWhiteSpace(txtHoTen.Text)) { MessageBox.Show($"Vui lòng nhập 10–12 số {nhanDinhDanh} và Họ tên hợp lệ!", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Warning); return false; }
                     if (txtSĐT.Text.Length < 10 || txtSĐT.Text.Length > 11) { MessageBox.Show("Số điện thoại phải bao gồm từ 10 đến 11 chữ số!", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Warning); return false; }
                     HashSet<string> cccd = new HashSet<string>(StringComparer.OrdinalIgnoreCase), sdt = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                     foreach (KhachHangData kh in listKhachHang) { cccd.Add(kh.CCCD ?? ""); sdt.Add(kh.SoDienThoai ?? ""); foreach (DongSoHuuData ds in kh.DanhSachDongSoHuu) { cccd.Add(ds.CCCD ?? ""); sdt.Add(ds.SoDienThoai ?? ""); } }
@@ -1426,6 +1451,7 @@ namespace QLTKNH
                         if (cccd.Contains(txtCCCD.Text.Trim())) { MessageBox.Show($"{nhanDinhDanh} của khách hàng đã tồn tại trong hệ thống!", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Warning); return false; }
                         if (sdt.Contains(txtSĐT.Text.Trim())) { MessageBox.Show("Số điện thoại của khách hàng đã tồn tại trong hệ thống!", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Warning); return false; }
                     }
+                    cccd.Clear(); sdt.Clear();
                     cccd.Add(txtCCCD.Text.Trim());
                     sdt.Add(txtSĐT.Text.Trim());
                     for (int i = 0; i < dsCCCDDongSoHuu.Count; i++)
@@ -1722,7 +1748,9 @@ namespace QLTKNH
                                                 }
                                                 foreach (var co in dsCCCDDongSoHuu.Select((x, i) => new { C = x.Text.Trim(), N = dsHoTenDongSoHuu[i].Text.Trim(), P = dsSDTDongSoHuu[i].Text.Trim() }))
                                                 {
-                                                    using (var insertCo = new SqlCommand(@"INSERT INTO dbo.DN_DongSoHuu
+                                                    KiemTraNguoiUyQuyenKhiThemDN(cn, tr, co.C, co.N, co.P);
+                                                    using (var insertCo = new SqlCommand(@"IF NOT EXISTS(SELECT 1 FROM dbo.DN_DongSoHuu WHERE CCCD_ChuSoHuu=@chu AND CCCD=@c)
+                                                        INSERT INTO dbo.DN_DongSoHuu
                                                         (CCCD_ChuSoHuu, CCCD, HoTen, SoDienThoai)
                                                         VALUES (@chu,@c,@n,@p)", cn, tr))
                                                     {
@@ -1790,19 +1818,14 @@ namespace QLTKNH
                 dlg.Controls.AddRange(new Control[] { lblCCCD, txtCCCD, lblHoTen, txtHoTen, lblSĐT, txtSĐT, lblTenDoanhNghiepMoi, txtTenDoanhNghiepMoi, btnThemDongSoHuu, nudSoLuongDongSoHuu, pnlDongSoHuu, lblLoaiTK, cboLoaiTK, rdoNgauNhien, rdoSoDep, lblPhiSoDep, lblSTK, txtSTK, pnlSubForm });
                 if (tuTimThanhToan)
                 {
-                    var repsCu = khachHangDaCo == null ? new List<DongSoHuuData>() : khachHangDaCo.DanhSachDongSoHuu;
-                    nudSoLuongDongSoHuu.Maximum = Math.Max(nudSoLuongDongSoHuu.Maximum, Math.Max(2, repsCu.Count));
+                    // Mở tài khoản thanh toán mới: chỉ tạo hai ô nhập trống,
+                    // không sao chép người được ủy quyền của các tài khoản cũ.
+                    nudSoLuongDongSoHuu.Maximum = Math.Max(nudSoLuongDongSoHuu.Maximum, 2);
                     pnlDongSoHuu.AutoScroll = true;
-                    nudSoLuongDongSoHuu.Value = Math.Max(nudSoLuongDongSoHuu.Minimum, Math.Max(2, repsCu.Count));
+                    nudSoLuongDongSoHuu.Value = Math.Max(nudSoLuongDongSoHuu.Minimum, 2);
                     nudSoLuongDongSoHuu.Visible = true;
                     pnlDongSoHuu.Visible = true;
                     RenderDongSoHuu();
-                    for (int i = 0; i < repsCu.Count; i++)
-                    {
-                        dsCCCDDongSoHuu[i].Text = repsCu[i].CCCD;
-                        dsHoTenDongSoHuu[i].Text = repsCu[i].HoTen;
-                        dsSDTDongSoHuu[i].Text = repsCu[i].SoDienThoai;
-                    }
                     // Visible hiệu dụng có thể false trước ShowDialog; chỉnh lại khi hiện.
                     dlg.Shown += (s, ev) => CapNhatViTri();
                 }

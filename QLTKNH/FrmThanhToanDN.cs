@@ -387,11 +387,14 @@ INSERT dbo.DN_TaiKhoanThanhToan(SoTKTT,CCCD,SoDu,TrangThai,NgayMo,HanMucNgay,Han
 VALUES(@stk,@mst,0,0,GETDATE(),1000000000,200000000,N'Doanh nghiệp',@ten,N'VND',0,GETDATE());", cn, tx))
                         { cmd.Parameters.AddWithValue("@mst", ma); cmd.Parameters.AddWithValue("@ten", kh.HoTen); cmd.Parameters.AddWithValue("@sdt", kh.SoDienThoai); cmd.Parameters.AddWithValue("@stk", stk); cmd.ExecuteNonQuery(); }
                         foreach (var rep in reps)
+                        {
+                            FrmMainDN.KiemTraNguoiUyQuyenKhiThemDN(cn, tx, rep.Key, rep.Value.Item1, rep.Value.Item2);
                             using (var cmd = new SqlCommand(@"IF EXISTS(SELECT 1 FROM dbo.DN_DongSoHuu WHERE CCCD_ChuSoHuu=@mst AND CCCD=@c AND (HoTen<>@n OR SoDienThoai<>@p)) THROW 52003,N'Thông tin người được ủy quyền khác dữ liệu đã đăng ký. Hãy sửa thông tin tại danh mục khách hàng trước.',1;
 IF NOT EXISTS(SELECT 1 FROM dbo.DN_DongSoHuu WHERE CCCD_ChuSoHuu=@mst AND CCCD=@c)
 INSERT dbo.DN_DongSoHuu(CCCD_ChuSoHuu,CCCD,HoTen,SoDienThoai) VALUES(@mst,@c,@n,@p);
 INSERT dbo.DN_DongSoHuuTaiKhoanThanhToan(SoTKTT,CCCD,HoTen,SoDienThoai) VALUES(@stk,@c,@n,@p);", cn, tx))
                             { cmd.Parameters.AddWithValue("@mst", ma); cmd.Parameters.AddWithValue("@stk", stk); cmd.Parameters.AddWithValue("@c", rep.Key); cmd.Parameters.AddWithValue("@n", rep.Value.Item1); cmd.Parameters.AddWithValue("@p", rep.Value.Item2); cmd.ExecuteNonQuery(); }
+                        }
                         Ghi(cn, tx, stk, "Mở tài khoản doanh nghiệp", 0, 0); tx.Commit();
                     }
                 }
@@ -520,12 +523,10 @@ INSERT dbo.DN_DongSoHuuTaiKhoanThanhToan(SoTKTT,CCCD,HoTen,SoDienThoai) VALUES(@
                             using (var r = cmd.ExecuteReader()) { daDangKy = r.Read(); ten.Text = daDangKy ? Convert.ToString(r[0]) : ""; sdt.Text = daDangKy ? Convert.ToString(r[1]) : ""; }
                         }
                         ten.ReadOnly = sdt.ReadOnly = daDangKy;
-                        ds.Rows.Clear();
-                        using (var cmd = new SqlCommand("SELECT DISTINCT CCCD,HoTen,SoDienThoai FROM dbo.DN_DongSoHuu WHERE CCCD_ChuSoHuu=@mst", cn))
-                        {
-                            cmd.Parameters.AddWithValue("@mst", ma);
-                            using (var r = cmd.ExecuteReader()) while (r.Read()) ds.Rows.Add(r[0], r[1], r[2]);
-                        }
+                        // MST chỉ dùng để tra cứu hồ sơ doanh nghiệp.
+                        // Không tự đưa người được ủy quyền cũ vào tài khoản mới.
+                        // Giữ các dòng đã nhập nếu tra cứu lại cùng MST.
+                        if (daTraCuu != ma) ds.Rows.Clear();
                     }
                     daTraCuu = ma;
                 };
@@ -564,11 +565,14 @@ INSERT dbo.DN_TaiKhoanThanhToan(SoTKTT,CCCD,SoDu,TrangThai,NgayMo,HanMucNgay,Han
 VALUES(@stk,@mst,0,0,GETDATE(),1000000000,200000000,N'Doanh nghiệp',@ten,N'VND',0,GETDATE());", cn, tx))
                                 { cmd.Parameters.AddWithValue("@mst", ma); cmd.Parameters.AddWithValue("@ten", ten.Text.Trim()); cmd.Parameters.AddWithValue("@sdt", sdt.Text.Trim()); cmd.Parameters.AddWithValue("@stk", stk.Text); cmd.ExecuteNonQuery(); }
                                 foreach (var rep in reps)
+                                {
+                                    FrmMainDN.KiemTraNguoiUyQuyenKhiThemDN(cn, tx, rep.Key, rep.Value.Item1, rep.Value.Item2);
                                     using (var cmd = new SqlCommand(@"IF EXISTS(SELECT 1 FROM dbo.DN_DongSoHuu WHERE CCCD_ChuSoHuu=@mst AND CCCD=@c AND (HoTen<>@n OR SoDienThoai<>@p)) THROW 52003,N'Thông tin người được ủy quyền khác dữ liệu đã đăng ký. Hãy sửa thông tin tại danh mục khách hàng trước.',1;
 IF NOT EXISTS(SELECT 1 FROM dbo.DN_DongSoHuu WHERE CCCD_ChuSoHuu=@mst AND CCCD=@c)
 INSERT dbo.DN_DongSoHuu(CCCD_ChuSoHuu,CCCD,HoTen,SoDienThoai) VALUES(@mst,@c,@n,@p);
 INSERT dbo.DN_DongSoHuuTaiKhoanThanhToan(SoTKTT,CCCD,HoTen,SoDienThoai) VALUES(@stk,@c,@n,@p);", cn, tx))
                                     { cmd.Parameters.AddWithValue("@mst", ma); cmd.Parameters.AddWithValue("@stk", stk.Text); cmd.Parameters.AddWithValue("@c", rep.Key); cmd.Parameters.AddWithValue("@n", rep.Value.Item1); cmd.Parameters.AddWithValue("@p", rep.Value.Item2); cmd.ExecuteNonQuery(); }
+                                }
                                 Ghi(cn, tx, stk.Text, "Mở tài khoản doanh nghiệp", 0, 0); tx.Commit();
                             }
                         }

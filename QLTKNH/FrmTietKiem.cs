@@ -1887,21 +1887,21 @@ namespace QLTKNH
                 dlg.MaximizeBox = false;
                 dlg.MinimizeBox = false;
                 dlg.AutoScroll = true;
-                dlg.BackColor = Color.FromArgb(245, 245, 247);
-                dlg.ForeColor = Color.Black;
+                dlg.BackColor = colorBg;
+                dlg.ForeColor = Color.White;
                 Font fontNormal = new Font("Segoe UI", 9F);
                 Font fontBold = new Font("Segoe UI", 9F, FontStyle.Bold);
                 var lblCCCD = new Label { Text = "CCCD (12 số):", Location = new Point(35, 25), AutoSize = true, Font = fontNormal };
-                var txtCCCDDlg = new TextBox { Location = new Point(165, 22), Width = 230, Text = currentCCCD, ReadOnly = true, Enabled = false, Font = fontNormal };
+                var txtCCCDDlg = new TextBox { Location = new Point(165, 22), Width = 230, Text = currentCCCD, ReadOnly = true, Enabled = false, Font = fontNormal, BackColor = Color.FromArgb(39, 53, 75), ForeColor = Color.White };
                 var lblHoTen = new Label { Text = "Họ và Tên:", Location = new Point(35, 60), AutoSize = true, Font = fontNormal };
-                var txtHoTenDlg = new TextBox { Location = new Point(165, 57), Width = 230, Text = currentHoTen, ReadOnly = !khachMoi, Enabled = khachMoi, MaxLength = 100, Font = fontNormal };
+                var txtHoTenDlg = new TextBox { Location = new Point(165, 57), Width = 230, Text = currentHoTen, ReadOnly = !khachMoi, Enabled = khachMoi, MaxLength = 100, Font = fontNormal, BackColor = Color.FromArgb(39, 53, 75), ForeColor = Color.White };
                 var lblSDT = new Label { Text = "Số điện thoại:", Location = new Point(35, 95), AutoSize = true, Font = fontNormal };
-                var txtSDTDlg = new TextBox { Location = new Point(165, 92), Width = 230, Text = currentSDT, ReadOnly = !khachMoi, Enabled = khachMoi, MaxLength = 11, Font = fontNormal };
+                var txtSDTDlg = new TextBox { Location = new Point(165, 92), Width = 230, Text = currentSDT, ReadOnly = !khachMoi, Enabled = khachMoi, MaxLength = 11, Font = fontNormal, BackColor = Color.FromArgb(39, 53, 75), ForeColor = Color.White };
 
-                var btnThemDSH = new Button { Text = "+ Thêm đồng sở hữu", Location = new Point(410, 90), Size = new Size(135, 28), FlatStyle = FlatStyle.Flat, ForeColor = colorBlue, BackColor = Color.White, Font = fontNormal };
+                var btnThemDSH = new Button { Text = "+ Thêm đồng sở hữu", Location = new Point(410, 90), Size = new Size(135, 28), FlatStyle = FlatStyle.Flat, ForeColor = Color.White, BackColor = colorBlue, Font = fontNormal };
                 btnThemDSH.FlatAppearance.BorderColor = colorBlue;
-                var nudDSH = new NumericUpDown { Location = new Point(410, 125), Width = 135, Minimum = 1, Maximum = 2, Value = 1, Visible = false };
-                var pnlDSH = new Panel { Location = new Point(25, 160), Size = new Size(520, 205), BorderStyle = BorderStyle.FixedSingle, BackColor = Color.White, AutoScroll = true, Visible = false };
+                var nudDSH = new NumericUpDown { Location = new Point(410, 125), Width = 135, Minimum = 1, Maximum = 2, Value = 1, Visible = false, BackColor = Color.FromArgb(39, 53, 75), ForeColor = Color.White };
+                var pnlDSH = new Panel { Location = new Point(25, 160), Size = new Size(520, 205), BorderStyle = BorderStyle.FixedSingle, BackColor = colorDarkPanel, AutoScroll = true, Visible = false };
                 var inputsDSH = new List<Tuple<TextBox, TextBox, TextBox>>();
                 Action renderDSH = () =>
                 {
@@ -1909,17 +1909,17 @@ namespace QLTKNH
                     pnlDSH.Controls.Clear(); inputsDSH.Clear();
                     for (int i = 0; i < (int)nudDSH.Value; i++)
                     {
-                        var g = new GroupBox { Text = "Đồng sở hữu " + (i + 1), Location = new Point(8, 8 + 64 * i), Size = new Size(490, 58) };
-                        var c = new TextBox { Location = new Point(50, 20), Width = 115, MaxLength = 12 };
-                        var n = new TextBox { Location = new Point(225, 20), Width = 105, MaxLength = 100 };
-                        var p = new TextBox { Location = new Point(375, 20), Width = 105, MaxLength = 11 };
+                        var g = new GroupBox { Text = "Đồng sở hữu " + (i + 1), Location = new Point(8, 8 + 64 * i), Size = new Size(490, 58), BackColor = colorDarkPanel, ForeColor = Color.FromArgb(147, 197, 253) };
+                        var c = new TextBox { Location = new Point(50, 20), Width = 115, MaxLength = 12, BackColor = Color.FromArgb(39, 53, 75), ForeColor = Color.White };
+                        var n = new TextBox { Location = new Point(225, 20), Width = 105, MaxLength = 100, BackColor = Color.FromArgb(39, 53, 75), ForeColor = Color.White };
+                        var p = new TextBox { Location = new Point(375, 20), Width = 105, MaxLength = 11, BackColor = Color.FromArgb(39, 53, 75), ForeColor = Color.White };
                         c.KeyPress += (s, e) => { if (!char.IsDigit(e.KeyChar) && !char.IsControl(e.KeyChar)) e.Handled = true; };
                         p.KeyPress += (s, e) => { if (!char.IsDigit(e.KeyChar) && !char.IsControl(e.KeyChar)) e.Handled = true; };
                         if (i < previous.Count) { c.Text = previous[i][0]; n.Text = previous[i][1]; p.Text = previous[i][2]; }
                         g.Controls.AddRange(new Control[] {
-                                new Label { Text = "CCCD", Location = new Point(7, 23), AutoSize = true }, c,
-                                new Label { Text = "Họ tên", Location = new Point(172, 23), AutoSize = true }, n,
-                                new Label { Text = "SĐT", Location = new Point(340, 23), AutoSize = true }, p
+                                new Label { Text = "CCCD", Location = new Point(7, 23), AutoSize = true, ForeColor = Color.White }, c,
+                                new Label { Text = "Họ tên", Location = new Point(172, 23), AutoSize = true, ForeColor = Color.White }, n,
+                                new Label { Text = "SĐT", Location = new Point(340, 23), AutoSize = true, ForeColor = Color.White }, p
                             });
                         pnlDSH.Controls.Add(g);
                         inputsDSH.Add(Tuple.Create(c, n, p));
@@ -1928,13 +1928,13 @@ namespace QLTKNH
                 nudDSH.ValueChanged += (s, e) => renderDSH();
 
                 var lblLoaiTK = new Label { Text = "Loại tài khoản:", Location = new Point(35, 130), AutoSize = true, Font = fontNormal };
-                var cboLoaiTK = new ComboBox { Location = new Point(165, 127), Width = 230, DropDownStyle = ComboBoxStyle.DropDownList, Font = fontNormal, Enabled = false };
+                var cboLoaiTK = new ComboBox { Location = new Point(165, 127), Width = 230, DropDownStyle = ComboBoxStyle.DropDownList, Font = fontNormal, Enabled = false, BackColor = Color.FromArgb(39, 53, 75), ForeColor = Color.White };
                 cboLoaiTK.Items.AddRange(new object[] { "Thanh toán", "Tiết kiệm", "Vay" });
                 cboLoaiTK.SelectedIndex = 1; // Luôn tiết kiệm.
                 var rdoNgauNhien = new RadioButton { Text = "Số ngẫu nhiên (Free)", Location = new Point(35, 165), AutoSize = true, Checked = true, Font = fontNormal };
                 var rdoSoDep = new RadioButton { Text = "Số đẹp (Tính phí)", Location = new Point(200, 165), AutoSize = true, Font = fontNormal };
                 var lblSTK = new Label { Text = "Số TK được cấp:", Location = new Point(35, 200), AutoSize = true, Font = fontNormal };
-                var txtSTK = new TextBox { Location = new Point(165, 197), Width = 230, ReadOnly = true, BackColor = Color.White, Font = fontBold };
+                var txtSTK = new TextBox { Location = new Point(165, 197), Width = 230, ReadOnly = true, Font = fontBold, BackColor = Color.FromArgb(39, 53, 75), ForeColor = Color.White };
 
                 var random = new Random();
                 Action taoSo = () =>
@@ -1957,13 +1957,13 @@ namespace QLTKNH
                 rdoSoDep.CheckedChanged += (s, e) => { if (rdoSoDep.Checked) taoSo(); };
                 taoSo();
 
-                var pnlTietKiem = new Panel { Location = new Point(25, 235), Size = new Size(520, 335), BorderStyle = BorderStyle.FixedSingle, BackColor = Color.White };
-                var lblHeader = new Label { Text = "THÔNG TIN SỔ TIẾT KIỆM", Location = new Point(25, 16), AutoSize = true, Font = fontBold, ForeColor = colorBlue };
+                var pnlTietKiem = new Panel { Location = new Point(25, 235), Size = new Size(520, 335), BorderStyle = BorderStyle.FixedSingle, BackColor = colorDarkPanel };
+                var lblHeader = new Label { Text = "THÔNG TIN SỔ TIẾT KIỆM", Location = new Point(25, 16), AutoSize = true, Font = fontBold, ForeColor = Color.FromArgb(147, 197, 253) };
                 var lblGui = new Label { Text = "Số tiền gửi (VNĐ):", Location = new Point(25, 58), AutoSize = true, Font = fontNormal };
-                var txtGui = new TextBox { Location = new Point(180, 55), Width = 220, Font = fontNormal };
+                var txtGui = new TextBox { Location = new Point(180, 55), Width = 220, Font = fontNormal, BackColor = Color.FromArgb(39, 53, 75), ForeColor = Color.White };
                 txtGui.KeyPress += (s, e) => { if (!char.IsDigit(e.KeyChar) && !char.IsControl(e.KeyChar)) e.Handled = true; };
                 var lblKH = new Label { Text = "Kỳ hạn gửi:", Location = new Point(25, 100), AutoSize = true, Font = fontNormal };
-                var cboKH = new ComboBox { Location = new Point(180, 97), Width = 220, DropDownStyle = ComboBoxStyle.DropDownList, Font = fontNormal };
+                var cboKH = new ComboBox { Location = new Point(180, 97), Width = 220, DropDownStyle = ComboBoxStyle.DropDownList, Font = fontNormal, BackColor = Color.FromArgb(39, 53, 75), ForeColor = Color.White };
                 try
                 {
                     using (var cn = new SqlConnection(_connStr))
@@ -1978,7 +1978,7 @@ namespace QLTKNH
                 }
                 catch (Exception ex) { MessageBox.Show("Không tải được cấu hình lãi suất: " + ex.Message); }
                 if (cboKH.Items.Count > 0) cboKH.SelectedIndex = 0;
-                var lblLai = new Label { Text = "Lãi suất theo kỳ hạn", Location = new Point(25, 148), AutoSize = true, ForeColor = colorBlue, Font = fontBold };
+                var lblLai = new Label { Text = "Lãi suất theo kỳ hạn", Location = new Point(25, 148), AutoSize = true, ForeColor = Color.FromArgb(125, 211, 252), Font = fontBold };
                 cboKH.SelectedIndexChanged += (s, e) =>
                 {
                     var k = cboKH.SelectedItem as KyHanLaiSuat;
@@ -1986,9 +1986,9 @@ namespace QLTKNH
                 };
                 if (cboKH.SelectedItem is KyHanLaiSuat initKH)
                     lblLai.Text = $"Lãi suất: {initKH.LaiSuat:0.##}%/năm";
-                var lblGhiChu = new Label { Text = "* Rút trước hạn áp dụng mức lãi theo quy định của hệ thống.", Location = new Point(25, 180), Size = new Size(460, 35), Font = new Font("Segoe UI", 8F, FontStyle.Italic), ForeColor = Color.Gray };
-                var btnXacNhan = new Button { Text = "Xác nhận mở", Location = new Point(110, 248), Size = new Size(125, 36), BackColor = colorBlue, ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Font = fontBold };
-                var btnHuy = new Button { Text = "Hủy", Location = new Point(250, 248), Size = new Size(110, 36), BackColor = Color.White, FlatStyle = FlatStyle.Flat, Font = fontNormal };
+                var lblGhiChu = new Label { Text = "* Rút trước hạn áp dụng mức lãi theo quy định của hệ thống.", Location = new Point(25, 180), Size = new Size(460, 35), Font = new Font("Segoe UI", 8F, FontStyle.Italic), ForeColor = Color.FromArgb(148, 163, 184) };
+                var btnXacNhan = new Button { Text = "Xác nhận mở", Location = new Point(110, 248), Size = new Size(125, 36), BackColor = Color.FromArgb(22, 163, 74), ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Font = fontBold };
+                var btnHuy = new Button { Text = "Hủy", Location = new Point(250, 248), Size = new Size(110, 36), BackColor = Color.FromArgb(71, 85, 105), ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Font = fontNormal };
                 btnHuy.Click += (s, e) => dlg.Close();
                 pnlTietKiem.Controls.AddRange(new Control[] { lblHeader, lblGui, txtGui, lblKH, cboKH, lblLai, lblGhiChu, btnXacNhan, btnHuy });
 

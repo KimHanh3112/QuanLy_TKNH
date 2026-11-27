@@ -321,7 +321,7 @@ namespace QLTKNH
                             };
                             ds.Add(kh); index.Add(kh.CCCD, kh);
                         }
-                    using (var cmd = new SqlCommand("SELECT CCCD_ChuSoHuu, CCCD, HoTen, SoDienThoai FROM dbo.DN_DongSoHuu", cn))
+                    using (var cmd = new SqlCommand("SELECT CCCD_ChuSoHuu, CCCD, HoTen, SoDienThoai FROM (SELECT CCCD_ChuSoHuu, CCCD, HoTen, SoDienThoai, ROW_NUMBER() OVER (PARTITION BY CCCD_ChuSoHuu, CCCD ORDER BY Id DESC) AS rn FROM dbo.DN_DongSoHuu WHERE CCCD<>CCCD_ChuSoHuu) d WHERE rn=1", cn))
                     using (var r = cmd.ExecuteReader())
                         while (r.Read())
                             if (index.TryGetValue(r.GetString(0), out var kh))
@@ -514,8 +514,11 @@ namespace QLTKNH
                         run("INSERT INTO dbo.DN_KhachHang(CCCD,HoTen,SoDienThoai,NoTruocDo,MaSoThue) VALUES(@c,@n,@p,0,@c)",
                             new[] { P("@c", kh.CCCD), P("@n", kh.HoTen), P("@p", kh.SoDienThoai) });
                         foreach (var ds in kh.DanhSachDongSoHuu)
-                            run("INSERT INTO dbo.DN_DongSoHuu(CCCD_ChuSoHuu,CCCD,HoTen,SoDienThoai) VALUES(@chu,@c,@n,@p)",
+                        {
+                            FrmMainDN.KiemTraNguoiUyQuyenKhiThemDN(cn, tx, ds.CCCD, ds.HoTen, ds.SoDienThoai);
+                            run("IF NOT EXISTS(SELECT 1 FROM dbo.DN_DongSoHuu WHERE CCCD_ChuSoHuu=@chu AND CCCD=@c) INSERT INTO dbo.DN_DongSoHuu(CCCD_ChuSoHuu,CCCD,HoTen,SoDienThoai) VALUES(@chu,@c,@n,@p)",
                                 new[] { P("@chu", kh.CCCD), P("@c", ds.CCCD), P("@n", ds.HoTen), P("@p", ds.SoDienThoai) });
+                        }
                         foreach (var tt in kh.DanhSachThanhToan)
                         {
                             run("INSERT INTO dbo.DN_TaiKhoanThanhToan(SoTKTT,CCCD,SoDu,TrangThai,NgayMo,NgayCapNhatTT,LoaiTienTe,LoaiTaiKhoan,HanMucNgay,HanMucLan,TenHienThi,SoTienPhongToa) VALUES(@stk,@c,@t,0,GETDATE(),GETDATE(),N'VND',N'Doanh nghiệp',1000000000,200000000,@n,0)",
@@ -846,6 +849,7 @@ namespace QLTKNH
                     }
                     if (cccd.Contains(txtCCCD.Text.Trim())) { MessageBox.Show("MST của doanh nghiệp đã tồn tại trong hệ thống!", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Warning); return false; }
                     if (sdt.Contains(txtSĐT.Text.Trim())) { MessageBox.Show("Số điện thoại của khách hàng đã tồn tại trong hệ thống!", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Warning); return false; }
+                    cccd.Clear(); sdt.Clear();
                     for (int i = 0; i < dsCCCDDongSoHuu.Count; i++)
                     {
                         string c = dsCCCDDongSoHuu[i].Text.Trim(), n = dsHoTenDongSoHuu[i].Text.Trim(), p = dsSDTDongSoHuu[i].Text.Trim();
